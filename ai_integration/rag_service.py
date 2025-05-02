@@ -1,10 +1,14 @@
 """
 Retrieval-Augmented Generation (RAG) implementation.
 This module connects the knowledge base and AI components.
-"""
-from typing import List
 
-from backend.domain.interfaces import ContextRetriever, KnowledgeBaseRepository, FAQEntry
+This implementation follows the Single Responsibility Principle by separating
+context retrieval from source tracking and other concerns.
+"""
+from typing import List, Optional
+
+from backend.domain.interfaces import ContextRetriever, KnowledgeBaseRepository, FAQEntry, SourceTracker
+from backend.services.source_tracker import SimpleSourceTracker
 
 
 class BasicContextRetriever(ContextRetriever):
@@ -19,14 +23,18 @@ class BasicContextRetriever(ContextRetriever):
     with more sophisticated retrieval methods without modifying existing code.
     """
     
-    def __init__(self, kb_repository: KnowledgeBaseRepository):
+    def __init__(self, kb_repository: KnowledgeBaseRepository, source_tracker: Optional[SourceTracker] = None):
         """
-        Initialize the context retriever with a knowledge base repository.
+        Initialize the context retriever with a knowledge base repository and optional source tracker.
         
         Args:
             kb_repository: Repository to retrieve knowledge entries from
+            source_tracker: Optional tracker for sources used in answers
         """
         self.kb_repository = kb_repository
+        self.source_tracker = source_tracker or SimpleSourceTracker()
+        self.last_context = ""
+        self.last_entries = []
     
     def retrieve(self, question: str) -> str:
         """
@@ -39,13 +47,32 @@ class BasicContextRetriever(ContextRetriever):
             A formatted string containing relevant context from the knowledge base
         """
         entries = self.kb_repository.get_relevant_entries(question)
+        self.last_entries = entries
         
         if not entries:
-            return "No relevant information found in the knowledge base."
+            self.last_context = "No relevant information found in the knowledge base."
+            return self.last_context
         
         # Format the entries into a context string
         context_parts = []
         for i, entry in enumerate(entries, 1):
             context_parts.append(f"Source {i}:\nQuestion: {entry.question}\nAnswer: {entry.answer}\n")
         
-        return "\n".join(context_parts)
+        self.last_context = "\n".join(context_parts)
+        return self.last_context
+    
+    def get_sources(self, answer: str, question: str) -> List[str]:
+        """
+        Get the sources used in generating an answer.
+        
+        Args:
+            answer: The generated answer
+            question: The original question
+            
+        Returns:
+            List of source identifiers
+        """
+        if not self.last_context or not answer:
+            return []
+        
+        return self.source_tracker.track_sources(question, answer, self.last_context)

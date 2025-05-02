@@ -3,7 +3,7 @@ Core interfaces for the Q&A application following the Dependency Inversion Princ
 All high-level modules should depend on these abstractions.
 """
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 class FAQEntry:
@@ -85,5 +85,113 @@ class QuestionAnswerService(ABC):
             
         Returns:
             Generated answer based on knowledge base and AI model
+        """
+        pass
+    
+    @abstractmethod
+    def answer_with_sources(self, question: str) -> tuple[str, List[str]]:
+        """
+        Process a question and generate an answer with source information.
+        
+        Args:
+            question: The user's question
+            
+        Returns:
+            Tuple containing (answer, list of sources)
+        """
+        pass
+
+
+class HistoryEntry:
+    """Data model representing a question-answer history entry."""
+    
+    def __init__(self, id: str, question: str, answer: str, timestamp: str, sources: Optional[List[str]] = None):
+        self.id = id
+        self.question = question
+        self.answer = answer
+        self.timestamp = timestamp
+        self.sources = sources or []
+
+
+class HistoryRepository(ABC):
+    """Abstract interface for managing question-answer history."""
+    
+    @abstractmethod
+    def add_entry(self, entry: HistoryEntry) -> None:
+        """
+        Add a new entry to the history.
+        
+        Args:
+            entry: The history entry to add
+        """
+        pass
+    
+    @abstractmethod
+    def get_all_entries(self) -> List[HistoryEntry]:
+        """
+        Retrieve all history entries.
+        
+        Returns:
+            List of all history entries
+        """
+        pass
+    
+    @abstractmethod
+    def clear(self) -> None:
+        """Clear all history entries."""
+        pass
+
+
+class QuestionValidator(ABC):
+    """Abstract interface for validating questions."""
+    
+    @abstractmethod
+    def validate(self, question: str) -> bool:
+        """
+        Validate if a question meets the requirements.
+        
+        Args:
+            question: The question to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        pass
+
+
+class SourceTracker(ABC):
+    """Abstract interface for tracking sources used in answers."""
+    
+    @abstractmethod
+    def track_sources(self, question: str, answer: str, context: str) -> List[str]:
+        """
+        Track sources used in generating an answer.
+        
+        Args:
+            question: The original question
+            answer: The generated answer
+            context: The context used to generate the answer
+            
+        Returns:
+            List of source identifiers
+        """
+        pass
+
+
+class RelevanceStrategy(ABC):
+    """Abstract interface for relevance scoring algorithms."""
+    
+    @abstractmethod
+    def score_relevance(self, question: str, entries: List[FAQEntry], limit: int = 3) -> List[FAQEntry]:
+        """
+        Score and filter entries based on relevance to the question.
+        
+        Args:
+            question: The user's question
+            entries: List of all available entries
+            limit: Maximum number of entries to return
+            
+        Returns:
+            List of most relevant entries, limited by the limit parameter
         """
         pass

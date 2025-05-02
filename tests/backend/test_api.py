@@ -18,8 +18,11 @@ def client():
 @pytest.fixture
 def mock_qa_service():
     """Create a mock QA service."""
-    mock = MagicMock(spec=QuestionAnswerService)
-    mock.answer.return_value = "This is a mock answer for testing."
+    # Создаем мок без spec, чтобы можно было добавлять методы
+    mock = MagicMock()
+    # Затем добавляем методы, которые нам нужны
+    mock.answer = MagicMock(return_value="This is a mock answer for testing.")
+    mock.answer_with_sources = MagicMock(return_value=("This is a mock answer for testing.", ["Source 1"]))
     return mock
 
 
@@ -41,7 +44,7 @@ def test_client(mock_qa_service):
 def test_ask_question_success(test_client, mock_qa_service):
     """Test the ask question endpoint with a valid question."""
     # Arrange
-    mock_qa_service.answer.return_value = "This is an answer about RAG systems."
+    mock_qa_service.answer_with_sources.return_value = ("This is an answer about RAG systems.", ["Source 1"])
     
     # Act
     response = test_client.post("/api/ask", json={"question": "What is RAG?"})
@@ -51,7 +54,8 @@ def test_ask_question_success(test_client, mock_qa_service):
     data = response.json()
     assert data["answer"] == "This is an answer about RAG systems."
     assert "sources" in data
-    mock_qa_service.answer.assert_called_once_with("What is RAG?")
+    assert data["sources"] == ["Source 1"]
+    mock_qa_service.answer_with_sources.assert_called_once_with("What is RAG?")
 
 
 def test_ask_question_invalid_request(test_client):
@@ -68,7 +72,7 @@ def test_ask_question_invalid_request(test_client):
 def test_ask_question_service_error(test_client, mock_qa_service):
     """Test the ask question endpoint when service raises an exception."""
     # Arrange
-    mock_qa_service.answer.side_effect = Exception("Service error")
+    mock_qa_service.answer_with_sources.side_effect = Exception("Service error")
     
     # Act
     response = test_client.post("/api/ask", json={"question": "What is RAG?"})

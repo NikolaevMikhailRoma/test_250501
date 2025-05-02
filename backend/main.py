@@ -1,9 +1,13 @@
 """
 Main FastAPI application module.
 This implements the API endpoints for the Q&A application.
+
+This module follows the Single Responsibility Principle by delegating business logic
+to appropriate services and focusing only on API routing and request handling.
 """
 import os
 import time
+import logging
 from typing import Optional, List, Dict, Any
 
 from dotenv import load_dotenv
@@ -12,10 +16,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exception_handlers import http_exception_handler
 
-from backend.domain.models import QuestionRequest, AnswerResponse, HistoryResponse, HistoryEntry
-from backend.domain.interfaces import QuestionAnswerService
+from backend.domain.models import QuestionRequest, AnswerResponse, HistoryResponse, HistoryEntry as ApiHistoryEntry
+from backend.domain.interfaces import QuestionAnswerService, HistoryRepository, HistoryEntry as DomainHistoryEntry
 from backend.domain.exceptions import BaseApplicationException, InvalidQuestionException
 from backend.di.containers import Container
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Load environment variables
 load_dotenv()
@@ -27,9 +37,7 @@ container.config.data.csv_path.from_value(
     os.getenv("FAQ_CSV_PATH", "data/samples/sample_faq.csv")
 )
 
-# Simple in-memory storage for question history
-# In a real application, this would be a database
-question_history: List[Dict[str, Any]] = []
+# History is now managed by the HistoryRepository
 
 # Create FastAPI app
 app = FastAPI(
@@ -53,13 +61,18 @@ async def startup():
     """Initialize application services on startup."""
     # Check if API key is available
     if not os.getenv("OPENAI_API_KEY"):
-        print("WARNING: OPENAI_API_KEY environment variable is not set.")
-        print("The application will fail when calling the OpenAI API.")
+        logging.warning("OPENAI_API_KEY environment variable is not set.")
+        logging.warning("The application will fail when calling the OpenAI API.")
 
 
 def get_qa_service() -> QuestionAnswerService:
     """Dependency provider for QA service."""
     return container.qa_service()
+
+
+def get_history_repository() -> HistoryRepository:
+    """Dependency provider for history repository."""
+    return container.history_repository()
 
 
 # Global exception handler
@@ -76,7 +89,8 @@ async def application_exception_handler(request: Request, exc: BaseApplicationEx
 @app.post("/api/ask", response_model=AnswerResponse)
 async def ask_question(
     request: QuestionRequest,
-    qa_service: QuestionAnswerService = Depends(get_qa_service)
+    qa_service: QuestionAnswerService = Depends(get_qa_service),
+    history_repo: HistoryRepository = Depends(get_history_repository)
 ):
     """
     Process a question and generate an answer using RAG.
@@ -84,61 +98,68 @@ async def ask_question(
     Args:
         request: The question request
         qa_service: Question answering service
+        history_repo: Repository for storing question history
         
     Returns:
-        Generated answer
+        Generated answer with sources
     """
-    # Validate the question
-    question = request.question.strip()
-    if len(question) < 3:
-        raise InvalidQuestionException("Question must be at least 3 characters long.")
-    
     try:
-        # Get answer from service
-        answer = qa_service.answer(question)
+        # The validation is now handled by the QA service
+        question = request.question
         
-        # Extract sources (implementation would depend on how your QA service returns information)
-        # For now, we'll extract FAQ entries that might be mentioned in the answer
-        sources = []
+        # Get answer and sources from service
+        answer, sources = qa_service.answer_with_sources(question)
         
-        # In a real implementation, we would track sources from the QA service
-        # Here we're using a simplistic approach for demo purposes
-        if "RAG" in answer:
-            sources.append("Retrieval-Augmented Generation FAQ")
+        # Create history entry
+        history_entry = DomainHistoryEntry(
+            id=str(int(time.time())),
+            question=question,
+            answer=answer,
+            timestamp=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
+            sources=sources
+        )
         
-        # Store in history
-        history_entry = {
-            "id": str(int(time.time())),
-            "question": question,
-            "answer": answer,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
-        }
-        question_history.append(history_entry)
-        
-        # Limit history size
-        if len(question_history) > 50:
-            question_history.pop(0)  # Remove oldest entry
+        # Store in history repository
+        history_repo.add_entry(history_entry)
         
         return AnswerResponse(
             answer=answer,
             sources=sources
         )
         
+    except InvalidQuestionException as e:
+        # Re-raise validation exceptions
+        raise e
     except Exception as e:
-        # Log the error (in production, use proper logging)
-        print(f"Error processing question: {str(e)}")
+        # Log the error with proper logging
+        logging.error(f"Error processing question: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to process question: {str(e)}")
 
 
 @app.get("/api/history", response_model=HistoryResponse)
-async def get_history():
+async def get_history(history_repo: HistoryRepository = Depends(get_history_repository)):
     """
     Get the history of questions and answers.
+    
+    Args:
+        history_repo: Repository for accessing question history
     
     Returns:
         History of questions and answers
     """
-    history_entries = [HistoryEntry(**entry) for entry in question_history]
+    # Get entries from repository
+    entries = history_repo.get_all_entries()
+    
+    # Convert domain model to API model
+    history_entries = [
+        ApiHistoryEntry(
+            id=entry.id,
+            question=entry.question,
+            answer=entry.answer,
+            timestamp=entry.timestamp
+        ) for entry in entries
+    ]
+    
     return HistoryResponse(history=history_entries)
 
 
