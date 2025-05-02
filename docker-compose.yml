@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"  # Backend API, only accessible locally
+      - "127.0.0.1:8080:8080"  # Frontend server, only accessible locally
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true  # Protect data directory
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=UTC
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true  # Make container filesystem read-only
+    tmpfs:
+      - /tmp  # Temporary storage for runtime
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+    internal: false  # Allow external connections
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/24

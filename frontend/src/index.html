@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Enabled Q&A Application</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .question-form {
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .answer-container {
+            margin-top: 30px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #2ecc71;
+            display: none;
+        }
+        .answer-heading {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .answer-text {
+            white-space: pre-wrap;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+            display: none;
+        }
+        .error {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-weight: 600;
+            display: none;
+        }
+        .history-container {
+            margin-top: 40px;
+        }
+        .history-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .history-question {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .history-answer {
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI-Enabled Q&A Application</h1>
+        
+        <div class="question-form">
+            <div class="form-group">
+                <label for="question">Ask a Question:</label>
+                <textarea id="question" rows="3" placeholder="Type your question here..."></textarea>
+            </div>
+            <button id="submit-btn">Ask Question</button>
+            <div id="loading" class="loading">Processing your question...</div>
+            <div id="error" class="error">An error occurred. Please try again.</div>
+        </div>
+        
+        <div id="answer-container" class="answer-container">
+            <div class="answer-heading">Answer:</div>
+            <div id="answer-text" class="answer-text"></div>
+        </div>
+        
+        <div class="history-container">
+            <h2>Previous Questions</h2>
+            <div id="history-list">
+                <!-- History items will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const questionInput = document.getElementById('question');
+        const submitBtn = document.getElementById('submit-btn');
+        const loadingEl = document.getElementById('loading');
+        const errorEl = document.getElementById('error');
+        const answerContainer = document.getElementById('answer-container');
+        const answerText = document.getElementById('answer-text');
+        const historyList = document.getElementById('history-list');
+        
+        // Config 
+        const API_URL = 'http://localhost:8000';
+        
+        // Local storage for history
+        let questionHistory = JSON.parse(localStorage.getItem('qaHistory') || '[]');
+        
+        // Submit handler
+        submitBtn.addEventListener('click', async () => {
+            const question = questionInput.value.trim();
+            
+            if (!question) {
+                alert('Please enter a question');
+                return;
+            }
+            
+            try {
+                // UI updates
+                submitBtn.disabled = true;
+                loadingEl.style.display = 'block';
+                errorEl.style.display = 'none';
+                answerContainer.style.display = 'none';
+                
+                // API call
+                const response = await fetch(`${API_URL}/api/ask`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('API request failed');
+                }
+                
+                const data = await response.json();
+                
+                // Display answer
+                answerText.textContent = data.answer;
+                answerContainer.style.display = 'block';
+                
+                // Add to history
+                const historyItem = {
+                    id: Date.now().toString(),
+                    question,
+                    answer: data.answer,
+                    timestamp: new Date().toISOString()
+                };
+                
+                questionHistory.unshift(historyItem);
+                localStorage.setItem('qaHistory', JSON.stringify(questionHistory.slice(0, 10)));
+                
+                // Update history display
+                renderHistory();
+                
+                // Reset form
+                questionInput.value = '';
+                
+            } catch (error) {
+                console.error('Error:', error);
+                errorEl.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                loadingEl.style.display = 'none';
+            }
+        });
+        
+        // Render history items
+        function renderHistory() {
+            historyList.innerHTML = '';
+            
+            if (questionHistory.length === 0) {
+                historyList.innerHTML = '<p>No previous questions</p>';
+                return;
+            }
+            
+            questionHistory.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                
+                const questionEl = document.createElement('div');
+                questionEl.className = 'history-question';
+                questionEl.textContent = item.question;
+                
+                const answerEl = document.createElement('div');
+                answerEl.className = 'history-answer';
+                answerEl.textContent = item.answer;
+                
+                historyItem.appendChild(questionEl);
+                historyItem.appendChild(answerEl);
+                historyList.appendChild(historyItem);
+            });
+        }
+        
+        // Initial render
+        renderHistory();
+    </script>
+</body>
+</html>
