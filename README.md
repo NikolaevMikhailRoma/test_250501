@@ -1,10 +1,9 @@
 # AI-Enabled Q&A Web Application
 
-A Retrieval-Augmented Generation (RAG) based Q&A web application that integrates with AI models to provide accurate answers based on a knowledge base. The application follows SOLID principles and clean architecture to ensure maintainability and extensibility.
+This project consists of a simple AI-powered application with both frontend and backend components. Its primary function is to answer user questions based on data contained within a CSV file. By default, the application leverages the GPT-4o language model.
 
 ## Project Structure
 
-This project follows a modular architecture based on SOLID principles:
 
 ```
 project_root/
@@ -40,15 +39,14 @@ project_root/
 ### Prerequisites
 
 - Python 3.9+
-- Node.js 16+ (for frontend)
 - OpenAI API key
 
 ### Installation
 
 1. Clone the repository:
    ```
-   git clone <repository-url>
-   cd <repository-directory>
+   git clone https://github.com/NikolaevMikhailRoma/test_250501.git
+   cd test_250501
    ```
 
 2. Set up Python environment:
@@ -74,11 +72,11 @@ uvicorn backend.main:app --reload
 ### Frontend
 
 ```
-cd frontend
-python serve.py
+cd 
+python ./frontend/serve.py
 ```
 
-Это запустит простой HTTP-сервер на порту 8080 для обслуживания статических файлов фронтенда.
+This will start a simple HTTP server on port 8080 to serve static frontend files.
 
 ## Docker Deployment
 
